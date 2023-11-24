@@ -1,0 +1,41 @@
+---
+title: "Data Replication Assignment"
+author: "Lia"
+date: "2023-11-24"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    number_sections: true
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, comment = "##", prompt = TRUE, tidy = TRUE, tidy.opts = list(width.cutoff = 75), fig.path = "img/")
+```
+
+# Introduction
+
+<img src="https://images.squarespace-cdn.com/content/5e2a22a2ca128a771ade8d50/1598782959890-9P2JAT0PQKWY2TWJL3GT/Cryptococcus+Cover+Image.jpg?format=1500w&content-type=image%2Fjpeg" width="200px"/>
+
+# Replication Code
+
+## Preparation
+
+Load the packages first. 
+
+```{r}
+library(curl)
+library(ggplot2)
+library(survival)
+```
+
+Assign the data to variables. 
+
+```{r}
+f <- curl("https://raw.githubusercontent.com/cbao2397/DataStorage/main/Combined_CM_Depression_Database.csv")
+d <- read.csv(f, header=TRUE, sep=",", stringsAsFactors=FALSE)
+head(d) #showing a few lines of raw data
+```
+
