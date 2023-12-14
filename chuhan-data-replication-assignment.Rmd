@@ -1,7 +1,7 @@
 ---
 title: "Data Replication Assignment"
 author: "Lia"
-date: "2023-11-24"
+date: "2023-12-14"
 output:
   html_document:
     toc: true
@@ -17,9 +17,22 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, comment = "##", prompt = TRU
 
 # Introduction
 
-<img src="https://images.squarespace-cdn.com/content/5e2a22a2ca128a771ade8d50/1598782959890-9P2JAT0PQKWY2TWJL3GT/Cryptococcus+Cover+Image.jpg?format=1500w&content-type=image%2Fjpeg" width="200px"/>
+<center>
+<img src="https://github.com/cbao2397/DataStorage/blob/main/ulcerative-colitis.jpg?raw=true" width="80%"/>
+<figcaption> Ulcerative Colitis (UC) </figcaption>
+</center>
 
-# Replication Code
+
+Ulcerative colitis (UC) is an inflammatory bowel disease (IBD) of parts of or the entire colon and rectum. UC often starts in young adulthood and affects patients throughout their whole lives. The cause of UC is currently unknown. Clinical symptoms and biological markers of inflammation assessment is used for diagnosing UC. The assessment usually include measuring intestinal permeability. Accordingy, in inflamed intestine tissues, the permeability is increased due to the loss of epithelial cells and/or the disruption of tight junctions between epithelial cells. The measurement of electrical impedance is recently demonstrated to be capable of monitoring mucosal integrity and inflammation disruption in real time. 
+
+<center>
+<img src="https://github.com/cbao2397/DataStorage/blob/main/MethodImpedance.jpg?raw=true" width="80%"/>
+<figcaption> Method of Measuring Impedance </figcaption>
+</center>
+
+In the research conducted in the chosen paper, the researchers aimed to use an established experimental model of 2,4,6-trinitrobenzene sulphonic acid (TNBS)-induced colitis in rats to assess whether changes in impedance can be spatially restricted to the site of inflammation, thus able to predict severities of intestinal inflammation. Impedance measurements were taken from normal rats at 5.5 and 8 cm into the colon, from the anal margin. Among the rats receiving the TNBS injection, a baseline internal control impedance measurement was taken, also at 5.5 and 8 cm into the colon at 5 min prior to injection and 90 min following the TNBS injection. Penumbra here refers to the adjacent region, which is 5.5 cm into the colon, and epicentre refers to the lesion region, which is 8 cm into the colon. At the same position in the colon, a sample of colonic tissue was taken from both normal rats and in rats 90 min after they receive the TNBS injections. 
+
+# Replication
 
 ## Preparation
 
@@ -27,15 +40,204 @@ Load the packages first.
 
 ```{r}
 library(curl)
+library(tidyr)
 library(ggplot2)
-library(survival)
+library(dplyr)
+library(ggpubr)
+library(AICcmodavg)
+library(broom)
 ```
 
 Assign the data to variables. 
 
 ```{r}
-f <- curl("https://raw.githubusercontent.com/cbao2397/DataStorage/main/Combined_CM_Depression_Database.csv")
+f <- curl("https://raw.githubusercontent.com/cbao2397/DataStorage/main/ProcessedEverything.csv")
 d <- read.csv(f, header=TRUE, sep=",", stringsAsFactors=FALSE)
+d[is.na(d)] <- 0
 head(d) #showing a few lines of raw data
 ```
 
+## Impedance Changes Following TNBS-induced colitis
+
+Create the graph with bar plots of impedance and SE as error bar. They grey and black bars means that the tissue comes from rats untreated. 
+```{r}
+get.se <- function(y) {
+  se <- sd(y) / sqrt(length(y)) #The error bar refers to SE
+  mu <- mean(y)
+  c(ymin=mu-se, ymax=mu+se)
+}
+g1 <- ggplot(d, aes(x=TissueType, y=ImpedanceB)) + stat_summary(fun.y=mean, geom="bar", fill=c("Normal5.5"="grey", "Normal8"="black", "Prior5.5"="grey", "Prior8"="black"), color="black", width=0.5) + stat_summary(fun.data=get.se, geom="errorbar", width=0.25) + ylim(0, 2000) + ylab("impedance(Ω)") + scale_x_discrete(labels=c("Normal5.5", "Normal8", "Prior5.5", "Prior8"))
+d2 <- d[c(9:16), ] #subset only the data of rats receiving injection
+g2 <- ggplot(d2, aes(x=TissueType, y=ImpedanceA)) + stat_summary(fun.y=mean, geom="bar", fill=c("Post5.5"="pink", "Post8"="brown1"), color="black", width=0.25) + stat_summary(fun.data=get.se, geom="errorbar", width=0.125) + ylim(0, 2000) + ylab("impedance(Ω)") + scale_x_discrete(labels=c( "Post5.5", "Post8"))
+Figure1 <- ggarrange(g1, g2) #Arrange the graph for better comparison
+Figure1
+```
+
+<center>
+<img src="https://github.com/cbao2397/DataStorage/blob/main/OriginFig1.jpg?raw=true" width="95%"/>
+<figcaption> Original Figure for Comparison </figcaption>
+</center>
+
+Do the two-way ANOVA test. A p-value of p<0.05 is considered as statistically significant here. 
+```{r}
+two.way1 <- aov(ImpedanceB - ImpedanceA ~ TissueType, data=d2)
+summary(two.way1)
+one.way1 <- aov(ImpedanceA ~ TissueType, data=d2)
+summary(one.way1)
+```
+Both of the p-values are smaller than 0.05. Therefore, it is verified that the impedance measurements taken within the inflammatory tissues decreased, and impedance measurements taken from the inflammatory epicenter at 90 min were significantly smaller than those taken at the same time within the penumbra. 
+
+## Histological Score (0-15) and Impedance
+
+Create the graph with bar plots of histological Score and SE as error bar, and another graph with trend line and scatterplot. 
+```{r}
+g3 <- ggplot(d, aes(x=TissueType, y=TotalScore))  + scale_x_discrete(labels=c("Normal5.5", "Normal8", "Inflamed5.5", "Inflamed8")) + stat_summary(fun.y=mean, geom="bar", fill=c("Normal5.5"="grey", "Normal8"="black", "Prior5.5"="pink", "Prior8"="brown1"), color="black", width=0.6) + stat_summary(fun.data=get.se, geom="errorbar", width=0.3) + ylim(0, 15) + ylab("histological score (0-15)")
+g4 <- ggplot(d, aes(x=ImpedanceA, y=TotalScore)) + geom_smooth(method="lm", se=FALSE, color="black") + geom_point(aes(colour=factor(TissueType), shape=factor(TissueType)), stat="identity", show.legend=TRUE) + theme(legend.position=c(0.8, 0.7), legend.title=element_blank()) + ylim(0,15) + xlim(500, 2000) + ylab("histological score (0-15)") + xlab("impedance(Ω)")
+g4 <- g4 + scale_shape_discrete(labels=c("5.5"="5.5 cm", "8"="8 cm", "A"="penumbra", "L"="epicentre")) + scale_colour_discrete(labels=c("5.5"="5.5 cm", "8"="8 cm", "A"="penumbra", "L"="epicentre"))
+Figure2 <- ggarrange(g3, g4) #Arrange the graph for better comparison
+Figure2
+```
+
+<center>
+<img src="https://github.com/cbao2397/DataStorage/blob/main/OriginFig2.jpg?raw=true" width="95%"/>
+<figcaption> Original Figure for Comparison </figcaption>
+</center>
+
+Do the statistical tests related to the first figure now. 
+```{r}
+d3 <- d[c(1:4, 10, 12, 14, 16), ]
+d4 <- d[c(5:8, 9, 11, 13, 15), ]
+one.way2 <- aov(TotalScore ~ TissueType, data=d3)
+summary(one.way2) #Histological damage difference between inflammatory penumbra (5.5cm) and normal 5.5 cm tissue. 
+one.way3 <- aov(TotalScore ~ TissueType, data=d4)
+summary(one.way3) #Histological damage difference between inflammatory epicentre (8cm) and normal 8 cm tissue. 
+```
+Calculate R-squared value and p-value of the correlation now. 
+```{r}
+limod1 <- lm(TotalScore ~ ImpedanceA, data=d)
+summary(limod1)
+```
+Both the difference in histological damage between inflammatory tissue and normal tissue and the correlation between histological score and impedance are verified as significant. Although the R-squared value indicates that the histological damage and impedance are not perfectly correlated, accordingly, they are still strongly correlated. 
+
+
+## CD3+ cells and Impedance
+
+Create the graph with bar plots of CD3+ cells count and SE as error bar, and another graph with trend line and scatterplot. 
+```{r}
+g5 <- ggplot(d, aes(x=TissueType, y=T_Mucosa))  + scale_x_discrete(labels=c("Normal5.5", "Normal8", "Inflamed5.5", "Inflamed8")) + stat_summary(fun.y=mean, geom="bar", fill=c("Normal5.5"="grey", "Normal8"="black", "Prior5.5"="pink", "Prior8"="brown1"), color="black", width=0.6) + stat_summary(fun.data=get.se, geom="errorbar", width=0.3) + ylim(0, 40) + ylab("CD3+ cells (mm-1)")
+g6 <- ggplot(d, aes(x=ImpedanceA, y=T_Mucosa)) + geom_smooth(method="lm", se=FALSE, color="black") + geom_point(aes(colour=factor(TissueType), shape=factor(TissueType)), stat="identity", show.legend=TRUE) + theme(legend.position=c(0.3, 0.3), legend.title=element_blank()) + ylim(0,40) + xlim(0, 2000) + ylab("CD3+ cells (mm-1)") + xlab("impedance(Ω)")
+g6 <- g6 + scale_shape_discrete(labels=c("5.5"="5.5 cm", "8"="8 cm", "A"="penumbra", "L"="epicentre")) + scale_colour_discrete(labels=c("5.5"="5.5 cm", "8"="8 cm", "A"="penumbra", "L"="epicentre"))
+Figure3 <- ggarrange(g5, g6) #Arrange the graph for better comparison
+Figure3
+```
+
+<center>
+<img src="https://github.com/cbao2397/DataStorage/blob/main/OriginFig3.jpg?raw=true" width="95%"/>
+<figcaption> Original Figure for Comparison </figcaption>
+</center>
+
+Do the statistical tests related to the first figure now. 
+```{r}
+one.way4 <- aov(T_Mucosa ~ TissueType, data=d3)
+summary(one.way4) #CD3+ cell count difference between inflammatory penumbra (5.5cm) and normal 5.5 cm tissue. 
+one.way5 <- aov(T_Mucosa ~ TissueType, data=d4)
+summary(one.way5) #CD3+ cell count difference between inflammatory epicentre (8cm) and normal 8 cm tissue. 
+one.way6 <- aov(T_Mucosa ~ TissueType, data=d2)
+summary(one.way6) #Difference between CD3+ Cells taken from different inflammatory site (penumbra and epicentre)
+```
+
+Calculate R-squared value and p-value of the correlation now. 
+```{r}
+limod2 <- lm(T_Mucosa ~ ImpedanceA, data=d)
+summary(limod2)
+```
+
+Both the difference in CD3+ cells number between inflammatory tissue and normal tissue and the correlation between CD3+ cells number and impedance are verified as significant. Although the R-squared value indicates that the histological damage and impedance are not perfectly correlated, accordingly, they are still moderately correlated. 
+
+
+## Eosinophils and Impedance
+
+Create the graph with bar plots of eosinophils and SE as error bar, and another graph with trend line and scatterplot. 
+```{r}
+g7 <- ggplot(d, aes(x=TissueType, y=E_Mucosa))  + scale_x_discrete(labels=c("Normal5.5", "Normal8", "Inflamed5.5", "Inflamed8")) + stat_summary(fun.y=mean, geom="bar", fill=c("Normal5.5"="grey", "Normal8"="black", "Prior5.5"="pink", "Prior8"="brown1"), color="black", width=0.6) + stat_summary(fun.data=get.se, geom="errorbar", width=0.3) + ylim(0, 25) + ylab("eosinophils (mm-1)")
+g8 <- ggplot(d, aes(x=ImpedanceA, y=E_Mucosa)) + geom_smooth(method="lm", se=FALSE, color="black") + geom_point(aes(colour=factor(TissueType), shape=factor(TissueType)), stat="identity", show.legend=TRUE) + theme(legend.position=c(0.3, 0.3), legend.title=element_blank()) + ylim(0,25) + xlim(0, 2000) + ylab("eosinophils (mm-1)") + xlab("impedance(Ω)")
+g8 <- g8 + scale_shape_discrete(labels=c("5.5"="5.5 cm", "8"="8 cm", "A"="penumbra", "L"="epicentre")) + scale_colour_discrete(labels=c("5.5"="5.5 cm", "8"="8 cm", "A"="penumbra", "L"="epicentre"))
+Figure4 <- ggarrange(g7, g8) #Arrange the graph for better comparison
+Figure4
+```
+
+<center>
+<img src="https://github.com/cbao2397/DataStorage/blob/main/OriginFig4.jpg?raw=true" width="95%"/>
+<figcaption> Original Figure for Comparison </figcaption>
+</center>
+
+Do the statistical tests related to the first figure now. 
+```{r}
+one.way7 <- aov(E_Mucosa ~ TissueType, data=d3)
+summary(one.way7) #Eosinophils difference between inflammatory penumbra (5.5cm) and normal 5.5 cm tissue. 
+one.way8 <- aov(E_Mucosa ~ TissueType, data=d4)
+summary(one.way8) #Eosinophils damage difference between inflammatory epicentre (8cm) and normal 8 cm tissue. 
+one.way9 <- aov(E_Mucosa ~ TissueType, data=d2)
+summary(one.way9) #Difference between eosinophils taken from different imflammatory site (penumbra and epicentre)
+```
+
+Calculate R-squared value and p-value of the correlation now. 
+```{r}
+limod3 <- lm(E_Mucosa ~ ImpedanceA, data=d)
+summary(limod3)
+```
+
+Both the difference in eosinophils between inflammatory epicentre and normal epicentre, and the correlation between eosinophils and impedance are verified as significant. Although the R-squared value indicates that the histological damage and impedance are not perfectly correlated, accordingly, they are still strongly correlated. 
+
+## Neutrophils and Impedance
+
+Create the graph with bar plots of neutrophils and SE as error bar, and another graph with trend line and scatterplot. 
+```{r}
+g9 <- ggplot(d, aes(x=TissueType, y=N_Mucosa))  + scale_x_discrete(labels=c("Normal5.5", "Normal8", "Inflamed5.5", "Inflamed8")) + stat_summary(fun.y=mean, geom="bar", fill=c("Normal5.5"="grey", "Normal8"="black", "Prior5.5"="pink", "Prior8"="brown1"), color="black", width=0.6) + stat_summary(fun.data=get.se, geom="errorbar", width=0.3) + ylim(0, 40) + ylab("neutrophils (mm-1)")
+g10 <- ggplot(d, aes(x=ImpedanceA, y=N_Mucosa)) + geom_smooth(method="lm", se=FALSE, color="black") + geom_point(aes(colour=factor(TissueType), shape=factor(TissueType)), stat="identity", show.legend=TRUE) + theme(legend.position=c(0.3, 0.3), legend.title=element_blank()) + ylim(0,40) + xlim(0, 2000) + ylab("neutrophils (mm-1)") + xlab("impedance(Ω)")
+g10 <- g10 + scale_shape_discrete(labels=c("5.5"="5.5 cm", "8"="8 cm", "A"="penumbra", "L"="epicentre")) + scale_colour_discrete(labels=c("5.5"="5.5 cm", "8"="8 cm", "A"="penumbra", "L"="epicentre"))
+Figure5 <- ggarrange(g9, g10) #Arrange the graph for better comparison
+Figure5
+```
+
+<center>
+<img src="https://github.com/cbao2397/DataStorage/blob/main/OriginFig5.jpg?raw=true" width="95%"/>
+<figcaption> Original Figure for Comparison </figcaption>
+</center>
+
+Do the statistical tests related to the first figure now. 
+```{r}
+one.way10 <- aov(N_Mucosa ~ TissueType, data=d3)
+summary(one.way10) #Neutrophils difference between inflammatory penumbra (5.5cm) and normal 5.5 cm tissue. 
+one.way11 <- aov(N_Mucosa ~ TissueType, data=d4)
+summary(one.way11) #Neutrophils difference between inflammatory epicentre (8cm) and normal 8 cm tissue. 
+```
+
+Calculate R-squared value and p-value of the correlation now. 
+```{r}
+limod4 <- lm(N_Mucosa ~ ImpedanceA, data=d)
+summary(limod4)
+```
+
+The difference in neutrophils between inflammatory epicentre and normal epicentre, and the correlation between neutrophils and impedance are verified as significant. Although the R-squared value indicates that the histological damage and impedance are not perfectly correlated, accordingly, they are still strongly correlated. 
+
+
+# Results Report
+
+## CD3+ cells
+After the TNBS injection, numbers of CD3+ cells increased (p < 0.05) in the mucosa of the tissue taken form the inflammatory penumbra (5.5 cm location), comparing with the number of CD3+ cells in normal 5.5 cm tissue. The same thing also happens (p < 0.05) in the epicentre (8 cm location), comparing with normal 8 cm tissue. Additionally, it was found that there were more CD3+ cells (p < 0.05) in tissue taken from the inflammatory epicentre than the inflammatory penumbra. There was a significant correlation between numbers of CD3+ cells and impedance values. (R-squared = 0.57, p=0.0007). 
+
+## Eosinophils
+After the TNBS injection, numbers of eosinophils increased (p < 0.05) in the mucosa of the tissue taken form the inflammatory epicentre (8 cm location), comparing with the number of CD3+ cells in normal 8 cm tissue. The same thing does not happen (p > 0.05) in the penumbra (5,5 cm location), comparing with normal 5.5 cm tissue. Additionally, it was found that there were more eosinophils (p < 0.05) in tissue taken from the inflammatory epicentre than the inflammatory penumbra. There was a significant correlation between numbers of eosinophils and impedance values. (R-squared = 0.79, p < 0.0001). 
+
+## Neutrophils
+After the TNBS injection, numbers of neutrophils increased (p < 0.05) in the mucosa of the tissue taken form the inflammatory penumbra (5.5 cm location), comparing with the number of neutrophils in normal 5.5 cm tissue. The same thing also happens (p < 0.05) in the epicentre (8 cm location), comparing with normal 8 cm tissue. There was a significant correlation between numbers of CD3+ cells and impedance values. (R-squared = 0.76, p < 0.0001). 
+
+# Conclusion
+It was showed that transmural impedance was accurate in predicting the severity of inflammation as ditermined by histological score and leucocyte infiltration (including CD3+ cells, eosinophils, and neutrophils) into mucosal tissue. Therefore, it is verified that transmural impedance can be used as a real-time, region specific indicator of mucosal integrity, and can refer to the severities of intestinal inflammation of different regions within the same individual. 
+
+# Other Notes
+
+Link to original dataset: https://doi.org/10.5061/dryad.79cnp5hrb
+
+The csv file used in this replication assignment is made manually by integrating the data in several separate files in the original data set into one single file. All necessary data is recorded into the csv file. 
